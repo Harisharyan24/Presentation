@@ -1,50 +1,78 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import gaussian, convolve
+from scipy.signal.windows import gaussian
+from scipy.signal import convolve
 
-# Parameters
-bitrate = 1e3  # 1 kbps
-f_dev = 2e3    # frequency deviation for FSK (2 kHz)
-fs = 100e3     # sampling frequency (100 kHz)
+# ------------------- Parameters -------------------
+bitrate = 1e3             # Bitrate (1 kbps)
+f_carrier = 7e3          # Carrier frequency (10 kHz)
+f_dev = 2e3               # Frequency deviation for GFSK
+fs = 100e3                # Sampling frequency (100 kHz)
 Tb = 1 / bitrate
 samples_per_bit = int(fs * Tb)
 
-# Sample bitstream
+# ------------------- Bitstream -------------------
 bits = np.array([1, 0, 1, 1, 0, 0, 1, 0])
-freq_shift = f_dev * (2 * bits - 1)
-t = np.linspace(0, Tb * len(bits), samples_per_bit * len(bits), endpoint=False)
-instantaneous_freq_fsk = np.repeat(freq_shift, samples_per_bit)
+bit_symbols = 2 * bits - 1               # Map: 0→-1, 1→+1
+freq_shift = f_dev * bit_symbols         # Baseband freq shift
+freq_upsampled = np.repeat(freq_shift, samples_per_bit)
 
-# FSK signal
-phase_fsk = 2 * np.pi * np.cumsum(instantaneous_freq_fsk) / fs
-fsk_signal = np.cos(phase_fsk)
-
-# GFSK signal
-gauss_filter = gaussian(samples_per_bit, std=samples_per_bit/4)
+# ------------------- Gaussian Filter -------------------
+BT = 0.3
+span = 4
+N = samples_per_bit * span
+std_dev = samples_per_bit / (2 * np.pi * BT)
+gauss_filter = gaussian(N, std=std_dev)
 gauss_filter /= np.sum(gauss_filter)
-freq_shift_gaussian = convolve(np.repeat(freq_shift, samples_per_bit), gauss_filter, mode='same')
-phase_gfsk = 2 * np.pi * np.cumsum(freq_shift_gaussian) / fs
+
+# ------------------- GFSK Modulation -------------------
+smoothed_freq_shift = convolve(freq_upsampled, gauss_filter, mode='same')
+instantaneous_freq = f_carrier + smoothed_freq_shift
+
+t = np.linspace(0, Tb * len(bits), len(freq_upsampled), endpoint=False)
+carrier = np.cos(2 * np.pi * f_carrier * t)
+phase_gfsk = 2 * np.pi * np.cumsum(instantaneous_freq) / fs
 gfsk_signal = np.cos(phase_gfsk)
 
-# Plotting
-fig, axs = plt.subplots(3, 1, figsize=(12, 9))
+# ------------------- Plot Setup -------------------
+plot_duration = len(bits) * Tb
+plot_samples = len(t)
 
-axs[0].step(np.arange(len(bits)), bits, where='post')
-axs[0].set_title("Input Bitstream")
-axs[0].set_ylim(-0.5, 1.5)
-axs[0].set_ylabel("Bit Value")
-axs[0].grid(True)
+bit_edges = np.arange(0, plot_duration, Tb)
 
-axs[1].plot(t[:1000], fsk_signal[:1000])
-axs[1].set_title("FSK Signal (First Few Bits)")
-axs[1].set_ylabel("Amplitude")
-axs[1].grid(True)
+plt.figure(figsize=(14, 8))
 
-axs[2].plot(t[:1000], gfsk_signal[:1000])
-axs[2].set_title("GFSK Signal (First Few Bits)")
-axs[2].set_xlabel("Time (s)")
-axs[2].set_ylabel("Amplitude")
-axs[2].grid(True)
+# --- Bitstream Plot ---
+plt.subplot(3, 1, 1)
+plt.step(t[::samples_per_bit], bits, where='post', linewidth=2)
+for edge in bit_edges:
+    plt.axvline(edge, color='gray', linestyle='--', linewidth=0.7)
+plt.title("Input Bitstream")
+plt.ylabel("Bit")
+plt.ylim(-0.5, 1.5)
+plt.grid(True)
+plt.xlim([0, plot_duration])
+
+# --- Carrier Plot ---
+plt.subplot(3, 1, 2)
+plt.plot(t, carrier, color='gray')
+for edge in bit_edges:
+    plt.axvline(edge, color='gray', linestyle='--', linewidth=0.7)
+plt.title("Carrier Wave (10 kHz)")
+plt.ylabel("Amplitude")
+plt.grid(True)
+plt.xlim([0, plot_duration])
+
+# --- GFSK Plot ---
+plt.subplot(3, 1, 3)
+plt.plot(t, gfsk_signal, color='blue')
+for edge in bit_edges:
+    plt.axvline(edge, color='gray', linestyle='--', linewidth=0.7)
+plt.title("GFSK Modulated Signal")
+plt.xlabel("Time (s)")
+plt.ylabel("Amplitude")
+plt.grid(True)
+plt.xlim([0, plot_duration])
 
 plt.tight_layout()
 plt.show()
