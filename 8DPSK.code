@@ -1,0 +1,101 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ------------------- Parameters -------------------
+bitrate = 1e3                     # 1 kbps
+symbol_rate = bitrate / 3        # Each 8-DPSK symbol = 3 bits
+fs = 100e3                        # Sampling frequency
+f_carrier = 1e3                   # Carrier frequency
+Tb = 1 / bitrate
+Ts = 1 / symbol_rate
+samples_per_symbol = int(fs * Ts)
+
+# ------------------- Input Bits -------------------
+# All 8 combinations (000 to 111)
+bits = np.array([
+    0,0,0,  # 000
+    0,0,1,  # 001
+    0,1,1,  # 011
+    0,1,0,  # 010
+    1,1,0,  # 110
+    1,1,1,  # 111
+    1,0,1,  # 101
+    1,0,0   # 100
+])
+symbols = bits.reshape(-1, 3)
+
+# ------------------- Phase Mapping -------------------
+phase_map = {
+    (0,0,0): 0,
+    (0,0,1): np.pi/4,
+    (0,1,1): np.pi/2,
+    (0,1,0): 3*np.pi/4,
+    (1,1,0): np.pi,
+    (1,1,1): -3*np.pi/4,
+    (1,0,1): -np.pi/2,
+    (1,0,0): -np.pi/4
+}
+
+# Initial phase
+phase = 0
+phases = []
+
+# Apply differential encoding
+for s in symbols:
+    delta = phase_map[tuple(s)]
+    phase = (phase + delta) % (2 * np.pi)
+    phases.append(phase)
+
+# ------------------- Signal Generation -------------------
+phases_upsampled = np.repeat(phases, samples_per_symbol)
+t = np.linspace(0, Ts * len(symbols), len(phases_upsampled), endpoint=False)
+carrier = np.cos(2 * np.pi * f_carrier * t)
+modulated = np.cos(2 * np.pi * f_carrier * t + phases_upsampled)
+
+# ------------------- Symbol Boundaries -------------------
+symbol_edges = np.arange(0, Ts * len(symbols), Ts)
+interval_labels = [
+    "000\n(0°)", "001\n(π/4)", "011\n(π/2)", "010\n(3π/4)",
+    "110\n(π)", "111\n(-3π/4)", "101\n(-π/2)", "100\n(-π/4)"
+]
+
+# ------------------- Plotting -------------------
+plt.figure(figsize=(14, 9))
+
+# Input Bitstream
+plt.subplot(3, 1, 1)
+plt.step(np.arange(len(bits)) * Tb, bits, where='post', linewidth=2)
+for edge in symbol_edges:
+    plt.axvline(edge, color='gray', linestyle='--', linewidth=0.6)
+plt.title("Input Bitstream (8 symbols, 3 bits each)")
+plt.ylabel("Bit")
+plt.ylim(-0.5, 1.5)
+plt.grid(True)
+plt.xlim([0, t[-1]])
+
+# Carrier
+plt.subplot(3, 1, 2)
+plt.plot(t, carrier, color='gray')
+for edge in symbol_edges:
+    plt.axvline(edge, color='gray', linestyle='--', linewidth=0.6)
+plt.title("Carrier Wave (4 kHz)")
+plt.ylabel("Amplitude")
+plt.grid(True)
+plt.xlim([0, t[-1]])
+
+# 8-DPSK Modulated Waveform
+plt.subplot(3, 1, 3)
+plt.plot(t, modulated, color='blue')
+for i, edge in enumerate(symbol_edges):
+    plt.axvline(edge, color='gray', linestyle='--', linewidth=0.6)
+    if i < len(interval_labels):
+        plt.text(edge + 0.0005, 1.1, interval_labels[i], rotation=0, fontsize=9)
+plt.title("8-DPSK Modulated Signal")
+plt.xlabel("Time (s)")
+plt.ylabel("Amplitude")
+plt.grid(True)
+plt.xlim([0, t[-1]])
+plt.ylim([-1.2, 1.5])
+
+plt.tight_layout()
+plt.show()
