@@ -1,0 +1,82 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ------------------- Parameters -------------------
+bitrate = 1e3           # Bitrate = 1 kbps
+symbol_rate = bitrate / 2
+fs = 100e3              # Sampling rate = 100 kHz
+f_carrier = 4e3        # Carrier = 10 kHz
+Tb = 1 / bitrate
+Ts = 1 / symbol_rate
+samples_per_symbol = int(fs * Ts)
+
+# ------------------- Input Bits -------------------
+bits = np.array([1, 0, 0, 0, 1, 1, 0, 1])  # Length should be even
+symbols = bits.reshape(-1, 2)
+
+# ------------------- π/4-DQPSK Phase Mapping -------------------
+# Differential Phase Mapping Table (Gray-coded)
+phase_map = {
+    (0, 0): np.pi/4,
+    (0, 1): 3*np.pi/4,
+    (1, 1): -3*np.pi/4,
+    (1, 0): -np.pi/4
+}
+
+# Initial phase
+phase = 0
+phases = []
+
+# Compute cumulative phase
+for s in symbols:
+    delta = phase_map[tuple(s)]
+    phase = (phase + delta) % (2 * np.pi)
+    phases.append(phase)
+
+# ------------------- I/Q Signal Generation -------------------
+# Upsample phases
+phases_upsampled = np.repeat(phases, samples_per_symbol)
+t = np.linspace(0, Ts * len(symbols), len(phases_upsampled), endpoint=False)
+carrier = np.cos(2 * np.pi * f_carrier * t)
+modulated_signal = np.cos(2 * np.pi * f_carrier * t + phases_upsampled)
+
+# ------------------- Bit Edges -------------------
+bit_edges = np.arange(0, Ts * len(symbols), Ts)
+
+# ------------------- Plotting -------------------
+plt.figure(figsize=(14, 8))
+
+# Input Bitstream
+plt.subplot(3, 1, 1)
+plt.step(np.arange(len(bits)) * Tb, bits, where='post', linewidth=2)
+for edge in bit_edges:
+    plt.axvline(edge, color='gray', linestyle='--', linewidth=0.6)
+plt.title("Input Bitstream")
+plt.ylabel("Bit")
+plt.ylim(-0.5, 1.5)
+plt.grid(True)
+plt.xlim([0, t[-1]])
+
+# Carrier Wave
+plt.subplot(3, 1, 2)
+plt.plot(t, carrier, color='gray')
+for edge in bit_edges:
+    plt.axvline(edge, color='gray', linestyle='--', linewidth=0.6)
+plt.title("Carrier Wave (10 kHz)")
+plt.ylabel("Amplitude")
+plt.grid(True)
+plt.xlim([0, t[-1]])
+
+# π/4-DQPSK Modulated Signal
+plt.subplot(3, 1, 3)
+plt.plot(t, modulated_signal, color='blue')
+for edge in bit_edges:
+    plt.axvline(edge, color='gray', linestyle='--', linewidth=0.6)
+plt.title("π/4-DQPSK Modulated Signal")
+plt.xlabel("Time (s)")
+plt.ylabel("Amplitude")
+plt.grid(True)
+plt.xlim([0, t[-1]])
+
+plt.tight_layout()
+plt.show()
