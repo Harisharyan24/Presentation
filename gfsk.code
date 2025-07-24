@@ -1,0 +1,50 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.signal import gaussian, convolve
+
+# Parameters
+bitrate = 1e3  # 1 kbps
+f_dev = 2e3    # frequency deviation for FSK (2 kHz)
+fs = 100e3     # sampling frequency (100 kHz)
+Tb = 1 / bitrate
+samples_per_bit = int(fs * Tb)
+
+# Sample bitstream
+bits = np.array([1, 0, 1, 1, 0, 0, 1, 0])
+freq_shift = f_dev * (2 * bits - 1)
+t = np.linspace(0, Tb * len(bits), samples_per_bit * len(bits), endpoint=False)
+instantaneous_freq_fsk = np.repeat(freq_shift, samples_per_bit)
+
+# FSK signal
+phase_fsk = 2 * np.pi * np.cumsum(instantaneous_freq_fsk) / fs
+fsk_signal = np.cos(phase_fsk)
+
+# GFSK signal
+gauss_filter = gaussian(samples_per_bit, std=samples_per_bit/4)
+gauss_filter /= np.sum(gauss_filter)
+freq_shift_gaussian = convolve(np.repeat(freq_shift, samples_per_bit), gauss_filter, mode='same')
+phase_gfsk = 2 * np.pi * np.cumsum(freq_shift_gaussian) / fs
+gfsk_signal = np.cos(phase_gfsk)
+
+# Plotting
+fig, axs = plt.subplots(3, 1, figsize=(12, 9))
+
+axs[0].step(np.arange(len(bits)), bits, where='post')
+axs[0].set_title("Input Bitstream")
+axs[0].set_ylim(-0.5, 1.5)
+axs[0].set_ylabel("Bit Value")
+axs[0].grid(True)
+
+axs[1].plot(t[:1000], fsk_signal[:1000])
+axs[1].set_title("FSK Signal (First Few Bits)")
+axs[1].set_ylabel("Amplitude")
+axs[1].grid(True)
+
+axs[2].plot(t[:1000], gfsk_signal[:1000])
+axs[2].set_title("GFSK Signal (First Few Bits)")
+axs[2].set_xlabel("Time (s)")
+axs[2].set_ylabel("Amplitude")
+axs[2].grid(True)
+
+plt.tight_layout()
+plt.show()
